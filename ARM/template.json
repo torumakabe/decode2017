@@ -1,0 +1,399 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "prefix": {
+            "type": "String",
+            "minLength": 1,
+            "maxLength": 8,
+            "metadata": {
+                "description": "Your prefix of resources (1 to 6 charactors)"
+            }
+        },
+        "skuName": {
+            "defaultValue": "S1",
+            "allowedValues": [
+                "S1",
+                "S2",
+                "S3",
+                "P1",
+                "P2",
+                "P3",
+                "P4"
+            ],
+            "type": "String",
+            "metadata": {
+                "description": "App Service Plan SKU"
+            }
+        },
+        "skuCapacity": {
+            "defaultValue": 1,
+            "minValue": 1,
+            "type": "Int",
+            "metadata": {
+                "description": "App Service Plan's instance count"
+            }
+        },
+        "administratorLogin": {
+            "type": "String",
+            "metadata": {
+                "description": "The admin user of the SQL Server"
+            }
+        },
+        "administratorLoginPassword": {
+            "type": "SecureString",
+            "metadata": {
+                "description": "The password of the admin user of the SQL Server"
+            }
+        },
+        "databaseName": {
+            "type": "String",
+            "metadata": {
+                "description": "The name of the new database to create."
+            }
+        },
+        "collation": {
+            "defaultValue": "Japanese_CI_AS",
+            "type": "String",
+            "metadata": {
+                "description": "The database collation for governing the proper use of characters."
+            }
+        },
+        "edition": {
+            "defaultValue": "Basic",
+            "allowedValues": [
+                "Basic",
+                "Standard",
+                "Premium"
+            ],
+            "type": "String",
+            "metadata": {
+                "description": "The type of database to create."
+            }
+        },
+        "maxSizeBytes": {
+            "defaultValue": "1073741824",
+            "type": "String",
+            "metadata": {
+                "description": "The maximum size, in bytes, for the database"
+            }
+        },
+        "requestedServiceObjectiveName": {
+            "defaultValue": "Basic",
+            "allowedValues": [
+                "Basic",
+                "S0",
+                "S1",
+                "S2",
+                "P1",
+                "P2",
+                "P3"
+            ],
+            "type": "String",
+            "metadata": {
+                "description": "The performance level for Edition"
+            }
+        },
+        "primarylocation": {
+            "defaultValue": "Japan East",
+            "allowedValues": [
+                "Japan West",
+                "Japan East",
+                "West US 2"
+            ],
+            "type": "String",
+            "metadata": {
+                "description": "Location of the primary site"
+            }
+        },
+        "secondarylocation": {
+            "defaultValue": "Japan West",
+            "allowedValues": [
+                "Japan West",
+                "Japan East",
+                "West US 2"
+            ],
+            "type": "String",
+            "metadata": {
+                "description": "Location of the secondary site"
+            }
+        },
+        "dnsName": {
+            "type": "String",
+            "metadata": {
+                "description": "Traffic Manager profile DNS name. Must be unique in .trafficmanager.net"
+            }
+        }
+    },
+    "variables": {
+        "primaryHostingPlanName": "[concat(parameters('prefix'), 'plan01', uniqueString(resourceGroup().id))]",
+        "primaryWebSiteName": "[concat(parameters('prefix'), 'app01', uniqueString(resourceGroup().id))]",
+        "primarySqlserverName": "[concat(parameters('prefix'), 'sqlsv01', uniqueString(resourceGroup().id))]",
+        "secondaryHostingPlanName": "[concat(parameters('prefix'), 'plan02', uniqueString(resourceGroup().id))]",
+        "secondaryWebSiteName": "[concat(parameters('prefix'), 'app02', uniqueString(resourceGroup().id))]",
+        "secondarySqlserverName": "[concat(parameters('prefix'), 'sqlsv02', uniqueString(resourceGroup().id))]",
+        "failoverGroupName": "[concat(parameters('prefix'), 'fg01', uniqueString(resourceGroup().id))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Sql/servers",
+            "name": "[variables('primarySqlserverName')]",
+            "apiVersion": "2014-04-01-preview",
+            "location": "[parameters('primarylocation')]",
+            "tags": {
+                "displayName": "SqlServer"
+            },
+            "properties": {
+                "administratorLogin": "[parameters('administratorLogin')]",
+                "administratorLoginPassword": "[parameters('administratorLoginPassword')]",
+                "version": "12.0"
+            },
+            "resources": [
+                {
+                    "type": "databases",
+                    "name": "[parameters('databaseName')]",
+                    "apiVersion": "2014-04-01-preview",
+                    "location": "[parameters('primarylocation')]",
+                    "tags": {
+                        "displayName": "Database"
+                    },
+                    "properties": {
+                        "edition": "[parameters('edition')]",
+                        "collation": "[parameters('collation')]",
+                        "maxSizeBytes": "[parameters('maxSizeBytes')]",
+                        "requestedServiceObjectiveName": "[parameters('requestedServiceObjectiveName')]"
+                    },
+                    "dependsOn": [
+                        "[concat('Microsoft.Sql/servers/', variables('primarySqlserverName'))]"
+                    ]
+                },
+                {
+                    "type": "firewallrules",
+                    "name": "AllowAllWindowsAzureIps",
+                    "apiVersion": "2014-04-01-preview",
+                    "location": "[parameters('primarylocation')]",
+                    "properties": {
+                        "endIpAddress": "0.0.0.0",
+                        "startIpAddress": "0.0.0.0"
+                    },
+                    "dependsOn": [
+                        "[concat('Microsoft.Sql/servers/', variables('primarySqlserverName'))]"
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "Microsoft.Web/serverfarms",
+            "sku": {
+                "name": "[parameters('skuName')]",
+                "capacity": "[parameters('skuCapacity')]"
+            },
+            "name": "[variables('primaryHostingPlanName')]",
+            "apiVersion": "2015-08-01",
+            "location": "[parameters('primarylocation')]",
+            "tags": {
+                "displayName": "HostingPlan"
+            },
+            "properties": {
+                "name": "[variables('primaryHostingPlanName')]"
+            }
+        },
+        {
+            "type": "Microsoft.Web/sites",
+            "name": "[variables('primaryWebSiteName')]",
+            "apiVersion": "2015-08-01",
+            "location": "[parameters('primarylocation')]",
+            "tags": {
+                "[concat('hidden-related:', resourceGroup().id, '/providers/Microsoft.Web/serverfarms/', variables('primaryHostingPlanName'))]": "empty",
+                "displayName": "Website"
+            },
+            "properties": {
+                "name": "[variables('primaryWebSiteName')]",
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('primaryHostingPlanName'))]"
+            },
+            "resources": [
+                {
+                    "type": "config",
+                    "name": "connectionstrings",
+                    "apiVersion": "2015-08-01",
+                    "properties": {
+                        "DefaultConnection": {
+                            "value": "[concat('Data Source=tcp:', variables('failoverGroupName'), '.database.windows.net', ',1433;Initial Catalog=', parameters('databaseName'), ';User Id=', parameters('administratorLogin'), ';Password=', parameters('administratorLoginPassword'), ';')]",
+                            "type": "SQLAzure"
+                        }
+                    },
+                    "dependsOn": [
+                        "[concat('Microsoft.Web/Sites/', variables('primaryWebSiteName'))]",
+                        "[concat('Microsoft.Sql/servers/', variables('primarySqlserverName'))]"
+                    ]
+                },
+                {
+                    "apiVersion": "2015-08-01",
+                    "name": "appsettings",
+                    "type": "config",
+                    "properties": {
+                        "AZURE_REGION": "[parameters('primarylocation')]"
+                    },
+                    "dependsOn": [
+                        "[concat('Microsoft.Web/Sites/', variables('primaryWebSiteName'))]"
+                    ]
+                }
+            ],
+            "dependsOn": [
+                "[concat('Microsoft.Web/serverFarms/', variables('primaryHostingPlanName'))]"
+            ]
+        },
+        {
+            "type": "Microsoft.Sql/servers",
+            "name": "[variables('secondarySqlserverName')]",
+            "apiVersion": "2014-04-01-preview",
+            "location": "[parameters('secondarylocation')]",
+            "tags": {
+                "displayName": "SqlServer"
+            },
+            "properties": {
+                "administratorLogin": "[parameters('administratorLogin')]",
+                "administratorLoginPassword": "[parameters('administratorLoginPassword')]",
+                "version": "12.0"
+            },
+            "resources": [
+                {
+                    "type": "firewallrules",
+                    "name": "AllowAllWindowsAzureIps",
+                    "apiVersion": "2014-04-01-preview",
+                    "location": "[parameters('secondarylocation')]",
+                    "properties": {
+                        "endIpAddress": "0.0.0.0",
+                        "startIpAddress": "0.0.0.0"
+                    },
+                    "dependsOn": [
+                        "[concat('Microsoft.Sql/servers/', variables('secondarySqlserverName'))]"
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "Microsoft.Web/serverfarms",
+            "sku": {
+                "name": "[parameters('skuName')]",
+                "capacity": "[parameters('skuCapacity')]"
+            },
+            "name": "[variables('secondaryHostingPlanName')]",
+            "apiVersion": "2015-08-01",
+            "location": "[parameters('secondarylocation')]",
+            "tags": {
+                "displayName": "HostingPlan"
+            },
+            "properties": {
+                "name": "[variables('secondaryHostingPlanName')]"
+            }
+        },
+        {
+            "type": "Microsoft.Web/sites",
+            "name": "[variables('secondaryWebSiteName')]",
+            "apiVersion": "2015-08-01",
+            "location": "[parameters('secondarylocation')]",
+            "tags": {
+                "[concat('hidden-related:', resourceGroup().id, '/providers/Microsoft.Web/serverfarms/', variables('secondaryHostingPlanName'))]": "empty",
+                "displayName": "Website"
+            },
+            "properties": {
+                "name": "[variables('secondaryWebSiteName')]",
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('secondaryHostingPlanName'))]"
+            },
+            "resources": [
+                {
+                    "type": "config",
+                    "name": "connectionstrings",
+                    "apiVersion": "2015-08-01",
+                    "properties": {
+                        "DefaultConnection": {
+                            "value": "[concat('Data Source=tcp:', variables('failoverGroupName'), '.database.windows.net', ',1433;Initial Catalog=', parameters('databaseName'), ';User Id=', parameters('administratorLogin'), ';Password=', parameters('administratorLoginPassword'), ';')]",
+                            "type": "SQLAzure"
+                        }
+                    },
+                    "dependsOn": [
+                        "[concat('Microsoft.Web/Sites/', variables('secondaryWebSiteName'))]",
+                        "[concat('Microsoft.Sql/servers/', variables('secondarySqlserverName'))]"
+                    ]
+                },
+                {
+                    "apiVersion": "2015-08-01",
+                    "name": "appsettings",
+                    "type": "config",
+                    "properties": {
+                        "AZURE_REGION": "[parameters('secondarylocation')]"
+                    },
+                    "dependsOn": [
+                        "[concat('Microsoft.Web/Sites/', variables('secondaryWebSiteName'))]"
+                    ]
+                }
+
+            ],
+            "dependsOn": [
+                "[concat('Microsoft.Web/serverFarms/', variables('secondaryHostingPlanName'))]"
+            ]
+        },
+        {
+            "type": "Microsoft.Network/trafficManagerProfiles",
+            "name": "trafficManagerDemo",
+            "apiVersion": "2015-11-01",
+            "location": "global",
+            "properties": {
+                "profileStatus": "Enabled",
+                "trafficRoutingMethod": "Priority",
+                "dnsConfig": {
+                    "relativeName": "[parameters('dnsName')]",
+                    "ttl": 30
+                },
+                "monitorConfig": {
+                    "protocol": "HTTP",
+                    "port": 80,
+                    "path": "/"
+                },
+                "endpoints": [
+                    {
+                        "name": "primary",
+                        "type": "Microsoft.Network/trafficManagerProfiles/azureEndpoints",
+                        "properties": {
+                            "targetResourceId": "[resourceId('Microsoft.Web/sites/', variables('primaryWebSiteName'))]",
+                            "endpointStatus": "Enabled",
+                            "priority": 1
+                        }
+                    },
+                    {
+                        "name": "secondary",
+                        "type": "Microsoft.Network/trafficManagerProfiles/azureEndpoints",
+                        "properties": {
+                            "targetResourceId": "[resourceId('Microsoft.Web/sites/', variables('secondaryWebSiteName'))]",
+                            "endpointStatus": "Enabled",
+                            "priority": 2
+                        }
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[concat('Microsoft.Web/sites/', variables('primaryWebSiteName'))]",
+                "[concat('Microsoft.Web/sites/', variables('secondaryWebSiteName'))]"
+            ]
+        }
+    ],
+    "outputs": {
+        "primarySqlserverName": {
+            "type": "string",
+            "value": "[variables('primarySqlserverName')]"
+        },
+        "secondarySqlserverName": {
+            "type": "string",
+            "value": "[variables('secondarySqlserverName')]"
+        },
+        "failoverGroupName":{
+            "type": "string",
+            "value": "[variables('failoverGroupName')]"
+        },
+        "databaseName": {
+            "type": "string",
+            "value": "[parameters('databaseName')]"
+        }
+    }
+}

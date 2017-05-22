@@ -1,0 +1,45 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "prefix": {
+            "value": "prjname"
+        },
+        "skuName": {
+            "value": "S1"
+        },
+        "skuCapacity": {
+            "value": 1
+        },
+        "administratorLogin": {
+            "value": "yourname"
+        },
+        "administratorLoginPassword": {
+            "value": "yourpassword"
+        },
+        "databaseName": {
+            "value": "yourdbname"
+        },
+        "collation": {
+            "value": "Japanese_CI_AS"
+        },
+        "edition": {
+            "value": "Basic"
+        },
+        "maxSizeBytes": {
+            "value": "1073741824"
+        },
+        "requestedServiceObjectiveName": {
+            "value": "Basic"
+        },
+        "primarylocation": {
+            "value": "Japan East"
+        },
+        "secondarylocation": {
+            "value": "West US 2"
+        },
+        "dnsName": {
+            "value": "yourdnsname"
+        }
+    }
+}
